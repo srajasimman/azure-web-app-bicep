@@ -4,6 +4,70 @@ This repository contains Azure ARM templates (Bicep) for deploying a two-tier we
 
 ## Architecture
 
+```mermaid
+flowchart TB
+    %% Clients
+    User["User"]:::external
+
+    %% Frontend Layer
+    subgraph "Frontend Layer"
+        direction TB
+        FrontDoor["Azure Front Door"]:::network
+        StaticStorage["Static Website Storage"]:::data
+    end
+
+    %% Backend Layer
+    subgraph "Backend Layer"
+        direction TB
+        subgraph "Azure Network (VNet)"
+            direction TB
+            VNet["Virtual Network"]:::network
+            AppSubnet["App Subnet"]:::network
+            AppService["App Service Plan & .NET API"]:::compute
+        end
+        MySQLDB["Azure Database for MySQL"]:::data
+        BlobStorage["Blob/Object Storage"]:::data
+    end
+
+    %% Security
+    Okta["Okta Authentication (OIDC)"]:::external
+
+    %% Environments
+    subgraph "Environments"
+        DevOverlay["Dev Environment Overlay"]:::network
+        ProdOverlay["Prod Environment Overlay (WAF enabled)"]:::network
+    end
+
+    %% Connections
+    User -->|"HTTPS"| FrontDoor
+    FrontDoor -->|"Serves Static Assets"| StaticStorage
+    FrontDoor -->|"Routes API Calls"| AppService
+    FrontDoor -->|"Validates Token"| Okta
+    AppService -->|"SQL over TLS"| MySQLDB
+    AppService -->|"REST API (Blob) over HTTPS"| BlobStorage
+    AppService -->|"Validates Token"| Okta
+    AppService --- AppSubnet
+    AppSubnet --- VNet
+
+    %% Click Events
+    click StaticStorage "https://github.com/srajasimman/azure-web-app-bicep/blob/main/modules/frontend/storage-account.bicep"
+    click FrontDoor "https://github.com/srajasimman/azure-web-app-bicep/blob/main/modules/frontend/front-door.bicep"
+    click AppService "https://github.com/srajasimman/azure-web-app-bicep/blob/main/modules/backend/app-service.bicep"
+    click MySQLDB "https://github.com/srajasimman/azure-web-app-bicep/blob/main/modules/backend/mysql.bicep"
+    click BlobStorage "https://github.com/srajasimman/azure-web-app-bicep/blob/main/modules/backend/storage.bicep"
+    click VNet "https://github.com/srajasimman/azure-web-app-bicep/blob/main/modules/network/vnet.bicep"
+    click AppSubnet "https://github.com/srajasimman/azure-web-app-bicep/blob/main/modules/network/app-subnet.bicep"
+    click Okta "https://github.com/srajasimman/azure-web-app-bicep/blob/main/modules/security/okta-authentication.bicep"
+    click DevOverlay "https://github.com/srajasimman/azure-web-app-bicep/blob/main/environments/dev/main.bicep"
+    click ProdOverlay "https://github.com/srajasimman/azure-web-app-bicep/blob/main/environments/prod/main.bicep"
+
+    %% Styles
+    classDef compute fill:#D0E8FF,stroke:#333,stroke-width:1px
+    classDef data fill:#DFFFD0,stroke:#333,stroke-width:1px
+    classDef network fill:#FFE0B2,stroke:#333,stroke-width:1px
+    classDef external fill:#E1D5E7,stroke:#333,stroke-width:1px
+```
+
 - **Frontend**: React Static UI hosted in Azure Storage Account and served through Azure Front Door
 - **Backend**: .NET API service hosted in Azure App Service with:
   - MySQL Server for data storage
