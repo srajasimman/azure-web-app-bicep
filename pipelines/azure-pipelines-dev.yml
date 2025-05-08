@@ -1,0 +1,112 @@
+trigger:
+  branches:
+    include:
+    - develop
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  azureSubscription: 'Azure-DevOps-Connection'  # Service connection name
+  resourceGroupName: 'rg-two-tier-app-dev'
+  backendProjectPath: '$(System.DefaultWorkingDirectory)/backend'
+  frontendProjectPath: '$(System.DefaultWorkingDirectory)/frontend'
+  deploymentName: 'dev-deployment-$(Build.BuildId)'
+
+stages:
+- stage: DeployInfrastructure
+  displayName: 'Deploy Azure Infrastructure'
+  jobs:
+  - job: DeployARMTemplates
+    displayName: 'Deploy ARM Templates'
+    steps:
+    - task: AzureCLI@2
+      displayName: 'Deploy Bicep Template'
+      inputs:
+        azureSubscription: $(azureSubscription)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az deployment group create \
+            --resource-group $(resourceGroupName) \
+            --template-file environments/dev/main.bicep \
+            --parameters environments/dev/parameters.json \
+            --name $(deploymentName)
+
+          # Store outputs as pipeline variables
+          echo "##vso[task.setvariable variable=frontendStorageName;isOutput=true]$(az deployment group show -g $(resourceGroupName) -n $(deploymentName) --query 'properties.outputs.frontendStorageAccountName.value' -o tsv)"
+          echo "##vso[task.setvariable variable=backendApiName;isOutput=true]$(az deployment group show -g $(resourceGroupName) -n $(deploymentName) --query 'properties.outputs.backendApiUrl.value' -o tsv | cut -d'/' -f3 | cut -d'.' -f1)"
+      name: infrastructureDeployment
+
+- stage: DeployFrontend
+  displayName: 'Build and Deploy Frontend'
+  dependsOn: DeployInfrastructure
+  variables:
+    frontendStorageName: $[ stageDependencies.DeployInfrastructure.DeployARMTemplates.outputs['infrastructureDeployment.frontendStorageName'] ]
+  jobs:
+  - job: BuildAndDeployFrontend
+    displayName: 'Build and Deploy React App'
+    steps:
+    - task: NodeTool@0
+      inputs:
+        versionSpec: '16.x'
+      displayName: 'Install Node.js'
+
+    - script: |
+        cd $(frontendProjectPath)
+        npm install
+        npm run build
+      displayName: 'Build React App'
+
+    - task: AzureCLI@2
+      displayName: 'Deploy to Storage Account'
+      inputs:
+        azureSubscription: $(azureSubscription)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az storage blob upload-batch \
+            --account-name $(frontendStorageName) \
+            --auth-mode key \
+            --source "$(frontendProjectPath)/build" \
+            --destination '$web'
+
+- stage: DeployBackend
+  displayName: 'Build and Deploy Backend'
+  dependsOn: DeployInfrastructure
+  variables:
+    backendApiName: $[ stageDependencies.DeployInfrastructure.DeployARMTemplates.outputs['infrastructureDeployment.backendApiName'] ]
+  jobs:
+  - job: BuildAndDeployBackend
+    displayName: 'Build and Deploy .NET API'
+    steps:
+    - task: UseDotNet@2
+      displayName: 'Use .NET 6.0'
+      inputs:
+        packageType: 'sdk'
+        version: '6.0.x'
+
+    - script: |
+        cd $(backendProjectPath)
+        dotnet restore
+        dotnet build --configuration Release
+        dotnet publish --configuration Release --output $(Build.ArtifactStagingDirectory)/publish
+      displayName: 'Build .NET API'
+
+    - task: ArchiveFiles@2
+      displayName: 'Archive .NET API'
+      inputs:
+        rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/publish'
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/backend.zip'
+        replaceExistingArchive: true
+
+    - task: AzureWebApp@1
+      displayName: 'Deploy to App Service'
+      inputs:
+        azureSubscription: $(azureSubscription)
+        appType: 'webApp'
+        appName: $(backendApiName)
+        package: '$(Build.ArtifactStagingDirectory)/backend.zip'
+        deploymentMethod: 'auto'
