@@ -2,7 +2,7 @@
 
 This repository contains Azure ARM templates (Bicep) for deploying a two-tier web application infrastructure in Azure.
 
-## Architecture
+## IaC Architecture
 
 ```mermaid
 flowchart TB
@@ -67,6 +67,11 @@ flowchart TB
     classDef network fill:#FFE0B2,stroke:#333,stroke-width:1px
     classDef external fill:#E1D5E7,stroke:#333,stroke-width:1px
 ```
+
+## Application Architecture
+![Application Architecture](./app-architecture.svg)
+
+## Overview
 
 - **Frontend**: React Static UI hosted in Azure Storage Account and served through Azure Front Door
 - **Backend**: .NET API service hosted in Azure App Service with:
