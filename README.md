@@ -2,6 +2,19 @@
 
 This repository contains Azure ARM templates (Bicep) for deploying a two-tier web application infrastructure in Azure.
 
+## Overview
+
+- **Frontend**: React Static UI hosted in Azure Storage Account and served through Azure Front Door
+- **Backend**: .NET API service hosted in Azure App Service with:
+  - MySQL Server for data storage
+  - Azure Storage Account for object storage
+  - Okta authentication integration
+
+## Environments
+
+- **Development**: Lower-tier resources optimized for development and testing
+- **Production**: Higher-tier resources with redundancy and security features
+
 ## IaC Architecture
 
 ```mermaid
@@ -70,19 +83,6 @@ flowchart TB
 
 ## Application Architecture
 ![Application Architecture](./app-architecture.svg)
-
-## Overview
-
-- **Frontend**: React Static UI hosted in Azure Storage Account and served through Azure Front Door
-- **Backend**: .NET API service hosted in Azure App Service with:
-  - MySQL Server for data storage
-  - Azure Storage Account for object storage
-  - Okta authentication integration
-
-## Environments
-
-- **Development**: Lower-tier resources optimized for development and testing
-- **Production**: Higher-tier resources with redundancy and security features
 
 ## Deployment
 
